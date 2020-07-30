@@ -44,10 +44,26 @@ public class OrcInspect {
 
         OrcReader reader = createOrcReader(new File(source));
 
+        Footer footer = reader.getFooter();
         Metadata metadata = reader.getMetadata();
-        System.out.println("metadata");
+
+        System.out.println("numberOfRows\t" + footer.getNumberOfRows());
+        System.out.println("rowsInRowGroup\t" + footer.getRowsInRowGroup());
+
+        // schema
+        ColumnMetadata<OrcType> types = footer.getTypes();
+        Optional<ColumnMetadata<ColumnStatistics>> stats = footer.getFileStats();
+        printSchema(types, stats);
+        System.out.println();
+
+        // stripes
+        List<StripeInformation> stripes = footer.getStripes();
+        System.out.println("numberOfStrips\t" + stripes.size());
+        for (int i = 0; i < stripes.size(); i++) {
+            System.out.println(String.format("stripe[%d]\t%s", i, stripes.get(i)));
+        }
+
         List<Optional<StripeStatistics>> stripeStats = metadata.getStripeStatsList();
-        System.out.println("numberOfStripeStats\t" + stripeStats.size());
         for (int i = 0; i < stripeStats.size(); i++) {
             if (stripeStats.get(i).isPresent()) {
                 System.out.println("stripeStats[" + i + "]");
@@ -61,28 +77,7 @@ public class OrcInspect {
         }
         System.out.println();
 
-        Footer footer = reader.getFooter();
-        System.out.println("footer");
-        System.out.println("numberOfRows\t" + footer.getNumberOfRows());
-        System.out.println("rowsInRowGroup\t" + footer.getRowsInRowGroup());
-        List<StripeInformation> stripes = footer.getStripes();
-        System.out.println("numberOfStrips\t" + stripes.size());
-        for (int i = 0; i < stripes.size(); i++ ) {
-            System.out.println("stripe[" + i + "]\t" + stripes.get(i));
-        }
-        ColumnMetadata<OrcType> types = footer.getTypes();
-        System.out.println("numberOfColumns\t" + types.size());
-        for (int i = 0; i < types.size(); i++) {
-            System.out.println("type[" + i + "]\t" + types.get(new OrcColumnId(i)));
-        }
-        if (footer.getFileStats().isPresent()) {
-            ColumnMetadata<ColumnStatistics> stats = footer.getFileStats().get();
-            for (int i = 0; i < stats.size(); i++) {
-                System.out.println("columnStatistics[" + i + "]\t" + stats.get(new OrcColumnId(i)));
-            }
-        }
         System.out.println("userMetadata\t" + footer.getUserMetadata().keySet());
-        System.out.println();
 
         System.out.println("compression_kind\t" + reader.getCompressionKind());
         System.out.println("compression_block_size\t" + reader.getBufferSize());
@@ -92,6 +87,25 @@ public class OrcInspect {
         OrcReaderOptions options = new OrcReaderOptions();
         final OrcDataSource orcDataSource = new FileOrcDataSource(targetFile, options);
         return new OrcReader(orcDataSource, options);
+    }
+
+    private void printSchema(ColumnMetadata<OrcType> types, Optional<ColumnMetadata<ColumnStatistics>> stats) {
+        OrcType root = types.get(new OrcColumnId(0));
+        System.out.println("numberOfColumns\t" + root.getFieldCount());
+
+        for (int i = 0; i < root.getFieldCount(); i++) {
+            String statsStr = "";
+            if (stats.isPresent()) {
+                statsStr = stats.get().get(root.getFieldTypeIndex(i)).toString();
+            }
+            System.out.println(String.format(
+                "column[%d]\tname = %s\ttype = %s\tstats = %s",
+                i,
+                root.getFieldName(i),
+                types.get(root.getFieldTypeIndex(i)).getOrcTypeKind(),
+                statsStr
+            ));
+        }
     }
 
     public static void main(String[] args) throws IOException {
