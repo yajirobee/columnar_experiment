@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map.Entry;
 
 import javax.inject.Inject;
 
@@ -12,6 +13,7 @@ import io.airlift.airline.Command;
 import io.airlift.airline.HelpOption;
 import io.airlift.airline.Option;
 import io.airlift.airline.SingleCommand;
+import io.airlift.slice.Slice;
 import io.prestosql.orc.FileOrcDataSource;
 import io.prestosql.orc.OrcDataSource;
 import io.prestosql.orc.OrcReader;
@@ -49,14 +51,16 @@ public class OrcInspect {
 
         System.out.println("numberOfRows\t" + footer.getNumberOfRows());
         System.out.println("rowsInRowGroup\t" + footer.getRowsInRowGroup());
+        System.out.println();
 
         // schema
+        System.out.println("schema");
         ColumnMetadata<OrcType> types = footer.getTypes();
         Optional<ColumnMetadata<ColumnStatistics>> stats = footer.getFileStats();
         printSchema(types, stats);
-        System.out.println();
 
         // stripes
+        System.out.println("stripes");
         List<StripeInformation> stripes = footer.getStripes();
         System.out.println("numberOfStrips\t" + stripes.size());
         for (int i = 0; i < stripes.size(); i++) {
@@ -66,21 +70,32 @@ public class OrcInspect {
         List<Optional<StripeStatistics>> stripeStats = metadata.getStripeStatsList();
         for (int i = 0; i < stripeStats.size(); i++) {
             if (stripeStats.get(i).isPresent()) {
-                System.out.println("stripeStats[" + i + "]");
                 StripeStatistics stripeStat = stripeStats.get(i).get();
-                System.out.println("retainedSize\t" + stripeStat.getRetainedSizeInBytes());
+                System.out.println(String.format(
+                    "stripeStats[%d]retainedSize\t%s",
+                    i,
+                    stripeStat.getRetainedSizeInBytes()
+                ));
                 for (int j = 0; j < stripeStat.getColumnStatistics().size(); j++) {
-                    System.out.println("striptStats[" + i + "][" + j + "]\t" +
-                                       stripeStat.getColumnStatistics().get(new OrcColumnId(j)));
+                    System.out.println(String.format(
+                        "striptStats[%d][%d]\t%s",
+                        i,
+                        j,
+                        stripeStat.getColumnStatistics().get(new OrcColumnId(j))
+                    ));
                 }
             }
         }
         System.out.println();
 
-        System.out.println("userMetadata\t" + footer.getUserMetadata().keySet());
+        System.out.println("userMetadata");
+        for (Entry<String, Slice> entry: footer.getUserMetadata().entrySet()) {
+            System.out.println(entry.getKey() + " = " + entry.getValue());
+        }
+        System.out.println();
 
-        System.out.println("compression_kind\t" + reader.getCompressionKind());
-        System.out.println("compression_block_size\t" + reader.getBufferSize());
+        System.out.println("compressionKind\t" + reader.getCompressionKind());
+        System.out.println("compressionBlockSize\t" + reader.getBufferSize());
     }
 
     private OrcReader createOrcReader(File targetFile) throws IOException {
@@ -89,23 +104,42 @@ public class OrcInspect {
         return new OrcReader(orcDataSource, options);
     }
 
+    private void visitType(
+        StringBuilder builder,
+        OrcType type,
+        int depth,
+        ColumnMetadata<OrcType> types,
+        Optional<ColumnMetadata<ColumnStatistics>> stats
+    ) {
+        for (int i = 0; i < type.getFieldCount(); i++) {
+            String statsStr = "";
+            OrcColumnId columnId = type.getFieldTypeIndex(i);
+            OrcType childType = types.get(columnId);
+            if (stats.isPresent()) {
+                statsStr = stats.get().get(columnId).toString();
+            }
+            if (depth == 0) {
+                builder.append(String.format("column[%d]\t", i));
+            }
+            builder.append(String.format(
+                "%sname = %s\ttype = %s\tstats = %s\n",
+                " ".repeat(depth * 2),
+                type.getFieldName(i),
+                childType.getOrcTypeKind(),
+                statsStr
+            ));
+            if (childType.getFieldCount() > 0) {
+                visitType(builder, childType, depth + 1, types, stats);
+            }
+        }
+    }
+
     private void printSchema(ColumnMetadata<OrcType> types, Optional<ColumnMetadata<ColumnStatistics>> stats) {
         OrcType root = types.get(new OrcColumnId(0));
         System.out.println("numberOfColumns\t" + root.getFieldCount());
-
-        for (int i = 0; i < root.getFieldCount(); i++) {
-            String statsStr = "";
-            if (stats.isPresent()) {
-                statsStr = stats.get().get(root.getFieldTypeIndex(i)).toString();
-            }
-            System.out.println(String.format(
-                "column[%d]\tname = %s\ttype = %s\tstats = %s",
-                i,
-                root.getFieldName(i),
-                types.get(root.getFieldTypeIndex(i)).getOrcTypeKind(),
-                statsStr
-            ));
-        }
+        StringBuilder builder = new StringBuilder();
+        visitType(builder, root, 0, types, stats);
+        System.out.println(builder.toString());
     }
 
     public static void main(String[] args) throws IOException {
