@@ -36,7 +36,7 @@ public class OrcInspect {
     @Arguments(description = "source file to inspect")
     public String source;
 
-    @Option(name = { "-v", "--verbose" }, description = "verbose output")
+    @Option(name = {"-v", "--verbose"}, description = "verbose output")
     public boolean verbose;
 
     public void run() throws IOException {
@@ -78,7 +78,7 @@ public class OrcInspect {
         }
 
         System.out.println("userMetadata");
-        for (Entry<String, Slice> entry: footer.getUserMetadata().entrySet()) {
+        for (Entry<String, Slice> entry : footer.getUserMetadata().entrySet()) {
             System.out.println(entry.getKey() + " = " + entry.getValue());
         }
         System.out.println();
@@ -109,10 +109,8 @@ public class OrcInspect {
         final private ColumnMetadata<OrcType> types;
         final private Optional<ColumnMetadata<ColumnStatistics>> stats;
 
-        public SchemaVisitor(
-            final ColumnMetadata<OrcType> types,
-            final Optional<ColumnMetadata<ColumnStatistics>> stats
-        ) {
+        public SchemaVisitor(final ColumnMetadata<OrcType> types,
+                final Optional<ColumnMetadata<ColumnStatistics>> stats) {
             this.types = types;
             this.stats = stats;
         }
@@ -142,7 +140,7 @@ public class OrcInspect {
         private void printSchema(final List<Column> columns) {
             StringBuilder builder = new StringBuilder();
             int nColumns = 0;
-            for (Column column: columns) {
+            for (Column column : columns) {
                 String statsStr = "";
                 if (stats.isPresent()) {
                     statsStr = stats.get().get(column.id).toString();
@@ -152,22 +150,18 @@ public class OrcInspect {
                 }
                 OrcType childType = types.get(column.id);
                 builder.append(String.format("%sname = %s\ttype = %s\tstats = %s\n",
-                                             " ".repeat(column.depth * 2),
-                                             column.name,
-                                             childType.getOrcTypeKind(),
-                                             statsStr));
+                        " ".repeat(column.depth * 2), column.name, childType.getOrcTypeKind(),
+                        statsStr));
 
             }
             System.out.println(builder.toString());
         }
     }
 
-    private void printStripeColumnStats(
-        final List<Column> columns,
-        final ColumnMetadata<ColumnStatistics> stats
-    ) {
+    private void printStripeColumnStats(final List<Column> columns,
+            final ColumnMetadata<ColumnStatistics> stats) {
         StringBuilder builder = new StringBuilder();
-        for (Column column: columns) {
+        for (Column column : columns) {
             builder.append(String.format("%sname = %s\tstats = %s\n", " ".repeat(column.depth * 2),
                     column.name, stats.get(column.id).toString()));
         }
